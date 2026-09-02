@@ -622,6 +622,7 @@ func startAgentInfrastructure(
 		log,
 		eventBus,
 		repos.AgentSettings,
+		services.Task,
 		agentRegistry,
 		repos.Secrets,
 		services.Task.TaskBaseBranches,

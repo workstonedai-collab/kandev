@@ -131,7 +131,6 @@ func (a *Adapter) newSession(ctx context.Context, mcpServers []types.McpServer) 
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-
 	a.mu.Lock()
 	conn := a.acpConn
 	a.mu.Unlock()
@@ -525,7 +524,6 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string, mcpServers 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
 	a.mu.Lock()
 	conn := a.acpConn
 	capabilities := a.capabilities
@@ -692,6 +690,8 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string, mcpServers 
 // replay. It is used for idle MCP reconfiguration when initialize advertised
 // sessionCapabilities.resume.
 func (a *Adapter) ResumeSession(ctx context.Context, sessionID string, mcpServers []types.McpServer) error {
+	a.configChangeMu.Lock()
+	defer a.configChangeMu.Unlock()
 	a.mu.Lock()
 	conn := a.acpConn
 	supportsResume := a.capabilities.SessionCapabilities.Resume != nil
