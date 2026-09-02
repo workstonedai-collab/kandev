@@ -264,6 +264,12 @@ function useTaskDependencyState() {
   return { blockedBy, setBlockedBy };
 }
 
+function useTaskMCPSelectionState() {
+  const [mcpServerIds, setMcpServerIds] = useState<string[]>([]);
+  const [mcpServerIdsDirty, setMcpServerIdsDirty] = useState(false);
+  return { mcpServerIds, setMcpServerIds, mcpServerIdsDirty, setMcpServerIdsDirty };
+}
+
 function useFreshBranchState() {
   const [freshBranchEnabled, setFreshBranchEnabled] = useState(false);
   const [currentLocalBranch, setCurrentLocalBranch] = useState("");
@@ -406,6 +412,7 @@ export function useDialogFormState(
   const remoteRepos = useRemoteReposState();
   const freshBranch = useFreshBranchState();
   const dependencies = useTaskDependencyState();
+  const mcpSelections = useTaskMCPSelectionState();
   const branchesByUrl = useBranchesByURL(workspaceId);
   const prInfoByUrl = usePRInfoByURL(workspaceId);
 
@@ -421,6 +428,8 @@ export function useDialogFormState(
     lockedWorkflow,
     resetters: {
       setBlockedBy: dependencies.setBlockedBy,
+      setMcpServerIds: mcpSelections.setMcpServerIds,
+      setMcpServerIdsDirty: mcpSelections.setMcpServerIdsDirty,
       setTaskName: form.setTaskName,
       setHasTitle: form.setHasTitle,
       setHasDescription: form.setHasDescription,
@@ -485,6 +494,7 @@ export function useDialogFormState(
     ...remoteRepos,
     ...freshBranch,
     ...dependencies,
+    ...mcpSelections,
     branchesByUrl,
     prInfoByUrl,
     clearDraft,
