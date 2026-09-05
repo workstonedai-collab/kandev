@@ -1325,7 +1325,8 @@ interface PluginRegistry {
   // as `slotProps`. It is owner-scoped: the host renders only the component
   // registered by the plugin currently being viewed, so your card appears on
   // your own settings page and never on another plugin's — no per-id gating
-  // needed in your component.
+  // needed in your component. Signed-in users can see this card; the separate
+  // schema-driven operator form and lifecycle controls remain administrator-only.
   registerComponent(
     slot: string,
     Component: React.ComponentType<{ slotProps?: unknown }>,
