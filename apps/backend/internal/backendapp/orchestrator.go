@@ -190,6 +190,7 @@ func provideOrchestrator(
 	msgCreator := &messageCreatorAdapter{svc: taskSvc, logger: log}
 	orchestratorSvc.SetMessageCreator(msgCreator)
 	orchestratorSvc.SetWorkspaceProcessRunner(agentruntime.NewWorkspaceProcessRunner(lifecycleMgr))
+	taskSvc.SetWorkflowMoveLifecycleGate(orchestratorSvc)
 	orchestratorSvc.SetTransientRetryMessageService(taskSvc)
 	orchestratorSvc.SetStreamingMessageRetractionService(taskSvc)
 	orchestratorSvc.SetSubagentContextRecorder(&subagentContextAdapter{svc: taskSvc})
