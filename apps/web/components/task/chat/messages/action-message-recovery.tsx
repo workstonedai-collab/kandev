@@ -20,6 +20,7 @@ export function sessionRecoveryAction(action: MessageAction): SessionRecoveryAct
   switch (recoveryAction) {
     case "resume":
     case "resume_new_branch":
+    case "continue_from_history":
     case "fresh_start":
     case "runtime_retry":
       return recoveryAction;
@@ -35,6 +36,7 @@ function recoveryActionLabel(
   if (action === "resume") return t("task:resumeSession");
   if (action === "fresh_start") return t("task:startFreshSession");
   if (action === "resume_new_branch") return t("task:continueOnNewBranch");
+  if (action === "continue_from_history") return t("task:continueFromHistory");
   return t("chat:managedRuntimeRetry");
 }
 
@@ -57,10 +59,12 @@ export function SessionRecoveryActionButtons({
     recoveryError,
     branchDetails,
     guardDetails,
+    continuationDetails,
     recoveryNotice,
     handleRecover,
     handleRestore,
     handleNewBranch,
+    handleContinueFromHistory,
   } = useSessionRecoveryActions({ taskId, sessionId, errorStamp });
 
   const onRecoveryAction = useCallback(
@@ -97,6 +101,16 @@ export function SessionRecoveryActionButtons({
       testId: "recovery-new-branch-button",
       onClick: () =>
         void handleNewBranch().then((success) => {
+          if (success) onRecoveryRequested();
+        }),
+    });
+  if (continuationDetails && !choices.some((choice) => choice.kind === "continue_from_history"))
+    choices.push({
+      kind: "continue_from_history",
+      label: t("task:continueFromHistory"),
+      testId: "recovery-continue-from-history-button",
+      onClick: () =>
+        void handleContinueFromHistory().then((success) => {
           if (success) onRecoveryRequested();
         }),
     });

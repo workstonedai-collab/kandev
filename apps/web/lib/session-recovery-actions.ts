@@ -3,6 +3,7 @@ export type RecoveryActionKind =
   | "fresh_start"
   | "runtime_retry"
   | "resume_new_branch"
+  | "continue_from_history"
   | "restore";
 
 export function selectPrimaryRecoveryAction(
@@ -12,6 +13,7 @@ export function selectPrimaryRecoveryAction(
   if (blocked) return null;
   const priority: RecoveryActionKind[] = [
     "resume_new_branch",
+    "continue_from_history",
     "runtime_retry",
     "resume",
     "restore",
