@@ -11,9 +11,9 @@ import type { ReviewSource } from "@/hooks/domains/session/use-review-sources";
 import { useEnvironmentSessionId } from "@/hooks/use-environment-session-id";
 import { useFileEditors } from "@/hooks/use-file-editors";
 import { usePanelActive } from "@/hooks/use-panel-active";
+import { useResyncGitStatusOnTabActivate } from "@/hooks/use-resync-git-status-on-tab-activate";
 import { t } from "@/lib/i18n";
-import { getWebSocketClient } from "@/lib/ws/connection";
-import { panelPortalManager, setPanelTitle } from "@/lib/layout/panel-portal-manager";
+import { setPanelTitle } from "@/lib/layout/panel-portal-manager";
 import { useDockviewStore } from "@/lib/state/dockview-store";
 import { BrowserPanel } from "./browser-panel";
 import type {
@@ -118,29 +118,6 @@ function ChatContent({
   );
 }
 
-/**
- * Request a fresh git-status snapshot when a diff surface becomes active.
- * The workspace poller can be in its slower mode after startup, so relying on
- * its next tick leaves the Changes panel showing an unavailable comparison
- * after the target becomes reachable again.
- */
-function useResyncGitStatusOnTabActivate(panelId: string, sessionId: string | null) {
-  useEffect(() => {
-    if (!sessionId) return;
-    const entry = panelPortalManager.get(panelId);
-    if (!entry?.api) return;
-
-    const refreshNow = () => {
-      getWebSocketClient()?.refreshSessionData(sessionId);
-    };
-    if (entry.api.isActive) refreshNow();
-    const disposable = entry.api.onDidActiveChange((event) => {
-      if (event.isActive) refreshNow();
-    });
-    return () => disposable.dispose();
-  }, [panelId, sessionId]);
-}
-
 /** Render the changes/diff viewer for the panel's params (`kind` "all" or
  *  "file"), closing the panel when it becomes empty. */
 function DiffViewerContent({
@@ -153,7 +130,7 @@ function DiffViewerContent({
   const selectedDiff = useDockviewStore((s) => s.selectedDiff);
   const setSelectedDiff = useDockviewStore((s) => s.setSelectedDiff);
   const { openFile } = useFileEditors();
-  const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const activeSessionId = useAppStore((s) => s.tasks.activeSessionId);
   const panelKind = (params?.kind as string) ?? "all";
   const selectedPath = panelKind === "file" ? (params?.path as string) : undefined;
   const selectedRepositoryName =
