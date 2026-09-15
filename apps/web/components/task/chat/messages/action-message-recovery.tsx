@@ -21,6 +21,7 @@ export function sessionRecoveryAction(action: MessageAction): SessionRecoveryAct
     case "resume":
     case "resume_new_branch":
     case "continue_from_history":
+    case "retry_connection":
     case "fresh_start":
     case "runtime_retry":
       return recoveryAction;
@@ -37,7 +38,27 @@ function recoveryActionLabel(
   if (action === "fresh_start") return t("task:startFreshSession");
   if (action === "resume_new_branch") return t("task:continueOnNewBranch");
   if (action === "continue_from_history") return t("task:continueFromHistory");
+  if (action === "retry_connection") return t("task:retryConnection");
   return t("chat:managedRuntimeRetry");
+}
+
+function addHistoryContinuationChoice(
+  choices: RecoveryChoice[],
+  enabled: boolean,
+  handleContinueFromHistory: () => Promise<boolean>,
+  onRecoveryRequested: () => void,
+  label: string,
+) {
+  if (!enabled || choices.some((choice) => choice.kind === "continue_from_history")) return;
+  choices.push({
+    kind: "continue_from_history",
+    label,
+    testId: "recovery-continue-from-history-button",
+    onClick: () =>
+      void handleContinueFromHistory().then((success) => {
+        if (success) onRecoveryRequested();
+      }),
+  });
 }
 
 export function SessionRecoveryActionButtons({
@@ -104,16 +125,13 @@ export function SessionRecoveryActionButtons({
           if (success) onRecoveryRequested();
         }),
     });
-  if (continuationDetails && !choices.some((choice) => choice.kind === "continue_from_history"))
-    choices.push({
-      kind: "continue_from_history",
-      label: t("task:continueFromHistory"),
-      testId: "recovery-continue-from-history-button",
-      onClick: () =>
-        void handleContinueFromHistory().then((success) => {
-          if (success) onRecoveryRequested();
-        }),
-    });
+  addHistoryContinuationChoice(
+    choices,
+    Boolean(continuationDetails),
+    handleContinueFromHistory,
+    onRecoveryRequested,
+    t("task:continueFromHistory"),
+  );
   return (
     <>
       {recoveryError && (

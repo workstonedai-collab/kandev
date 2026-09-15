@@ -9,6 +9,7 @@ const MORE_OPTIONS = "More options";
 
 const mocks = vi.hoisted(() => ({
   request: vi.fn(),
+  stop: vi.fn(),
   agentProfiles: [{ id: "profile-1" }],
 }));
 
@@ -26,6 +27,10 @@ vi.mock("@/components/state-provider", () => ({
 
 vi.mock("@/lib/ws/connection", () => ({
   getWebSocketClient: () => ({ request: mocks.request }),
+}));
+
+vi.mock("@/hooks/domains/session/use-session-actions", () => ({
+  useSessionActions: () => ({ stop: mocks.stop }),
 }));
 
 vi.mock("@/components/task/new-session-dialog", () => ({
@@ -46,6 +51,8 @@ vi.mock("react-i18next", () => ({
         "task:sessionCompleted": "This session is complete.",
         "task:newAgent": "New Agent",
         "task:agentHasStopped": "This agent has stopped.",
+        "task:durableDeliveryUncertain":
+          "Delivery was interrupted. The prompt outcome is uncertain.",
         "task:resume": "Resume",
         "task:resuming": "Resuming...",
         "task:starting": "Starting...",
@@ -54,6 +61,10 @@ vi.mock("react-i18next", () => ({
         "task:continueOnNewBranch": "Continue on a new branch",
         "task:restoreReadOnlyWorkspace": "Restore read-only workspace",
         "task:retry": "Retry",
+        "task:retryConnection": "Retry connection",
+        "task:retryingConnection": "Retrying connection...",
+        "task:stop": "Stop",
+        "task:stopping": "Stopping...",
         "task:recoveryMoreOptions": MORE_OPTIONS,
         "task:couldnTStartASession": "Session recovery failed",
         "task:failedToResumeSession": "Failed to resume session",
@@ -95,6 +106,7 @@ function BannerHarness({
 
 beforeEach(() => {
   mocks.request.mockReset().mockResolvedValue(undefined);
+  mocks.stop.mockReset().mockResolvedValue(true);
   mocks.agentProfiles.splice(0, mocks.agentProfiles.length, { id: "profile-1" });
 });
 
@@ -193,6 +205,30 @@ describe("SessionStoppedBanner basics", () => {
     expect(screen.getByRole("button", { name: "Restart" })).toBeTruthy();
 
     expect(screen.getByTestId(FRESH_BUTTON_TEST_ID)).toBeTruthy();
+  });
+
+  it("offers connection retry and Stop for an uncertain prompt outcome", async () => {
+    render(<BannerHarness mode="recoverable" uncertainDelivery />);
+
+    expect(
+      screen.getByText("Delivery was interrupted. The prompt outcome is uncertain."),
+    ).toBeTruthy();
+    expect(screen.queryByTestId(RESUME_BUTTON_TEST_ID)).toBeNull();
+    expect(screen.queryByTestId(FRESH_BUTTON_TEST_ID)).toBeNull();
+    expect(screen.getByTestId("recovery-retry-connection-button")).toBeTruthy();
+    expect(screen.getByTestId("recovery-stop-button")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("recovery-retry-connection-button"));
+    await waitFor(() =>
+      expect(mocks.request).toHaveBeenCalledWith(
+        SESSION_RECOVER_ACTION,
+        { task_id: TASK_ID, session_id: SESSION_ID, action: "retry_connection" },
+        30000,
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId("recovery-stop-button"));
+    await waitFor(() => expect(mocks.stop).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -306,6 +342,7 @@ function guardRecoveryActions(
     busyAction: null,
     recoveryError: new Error(message),
     branchDetails: null,
+    continuationDetails: null,
     guardDetails: { kind: "session_recovery_in_progress", retryable: true },
     recoveryNotice: null,
     manualRecoveryFailure: { operation },
@@ -313,5 +350,6 @@ function guardRecoveryActions(
     handleRestore: vi.fn().mockResolvedValue(undefined),
     handleRetry: vi.fn().mockResolvedValue(false),
     handleNewBranch: vi.fn().mockResolvedValue(false),
+    handleContinueFromHistory: vi.fn().mockResolvedValue(false),
   };
 }
