@@ -37,7 +37,6 @@ async function setupTask(
   );
 
   if (options.requiredPath) {
-    let workspacePath = "";
     await expect
       .poll(async () => (await apiClient.getTaskEnvironment(task.id))?.status ?? null, {
         timeout: 30_000,
@@ -65,11 +64,9 @@ async function setupTask(
             (candidate, index, paths): candidate is string =>
               Boolean(candidate) && paths.indexOf(candidate) === index,
           );
-          workspacePath =
-            candidatePaths.find((candidate) =>
-              fs.existsSync(path.join(candidate, options.requiredPath!)),
-            ) ?? "";
-          return workspacePath !== "";
+          return candidatePaths.some((candidate) =>
+            fs.existsSync(path.join(candidate, options.requiredPath!)),
+          );
         },
         {
           timeout: 90_000,
