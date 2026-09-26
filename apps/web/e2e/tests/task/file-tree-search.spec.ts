@@ -102,7 +102,7 @@ test.describe("File tree search", () => {
       "FT Search Clear",
     );
 
-    await expect(session.fileTreeNode("clear-alpha.ts")).toBeVisible({ timeout: 15_000 });
+    await session.fileTree.waitForFileTreeNode("clear-alpha.ts");
     await testPage.getByRole("button", { name: "Search files" }).click();
     const input = testPage.getByPlaceholder("Search files...");
     await input.fill("clear-alpha");
@@ -113,6 +113,7 @@ test.describe("File tree search", () => {
 
     // Clear input - tree comes back, both files visible again.
     await input.fill("");
+    await session.fileTree.waitForFileTreeNode("clear-alpha.ts", 15_000);
     await expect(session.fileTreeNode("clear-alpha.ts")).toBeVisible({ timeout: 5_000 });
     await expect(session.fileTreeNode("clear-bravo.ts")).toBeVisible({ timeout: 5_000 });
   });

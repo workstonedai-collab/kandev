@@ -1,5 +1,5 @@
 import { test, expect } from "../../fixtures/test-base";
-import { KanbanPage } from "../../pages/kanban-page";
+import { waitForSessionAgentctlReady } from "../../helpers/session-store";
 import { SessionPage } from "../../pages/session-page";
 
 const TERMINAL_STATES = ["COMPLETED", "FAILED", "CANCELLED"];
@@ -18,9 +18,6 @@ const TERMINAL_STATES = ["COMPLETED", "FAILED", "CANCELLED"];
  * the reconnect loop can see neither.
  */
 test.describe("terminal on an ended session", () => {
-  // testPage, not page: it is the fixture that points baseURL at the worker's
-  // own frontend. With the default page, KanbanPage.goto()'s relative "/" has
-  // nothing to resolve against and Playwright rejects it as an invalid URL.
   test("shows the ended-session reason instead of a connecting spinner", async ({
     testPage,
     apiClient,
@@ -54,6 +51,18 @@ test.describe("terminal on an ended session", () => {
       .poll(state, { timeout: 60_000, message: "Waiting for the session to settle" })
       .toMatch(new RegExp([...TERMINAL_STATES, "WAITING_FOR_INPUT", "IDLE"].join("|")));
 
+    await testPage.goto(`/t/${task.id}`);
+    await expect(testPage).toHaveURL(new RegExp(`/t/${task.id}$`));
+
+    const session = new SessionPage(testPage);
+    await session.waitForLoad();
+    await waitForSessionAgentctlReady(testPage, sessionId as string);
+
+    const terminalPanel = testPage.getByTestId("terminal-panel").first();
+    await expect(terminalPanel).toBeVisible({ timeout: 15_000 });
+    await session.expectTerminalConnected(30_000);
+    await expect(terminalPanel.getByTestId("workspace-unavailable")).toBeHidden();
+
     // If it settled somewhere still live, cancel it. By now an execution
     // exists, so the stop lands.
     if (!TERMINAL_STATES.includes(await state())) {
@@ -62,19 +71,6 @@ test.describe("terminal on an ended session", () => {
         .poll(state, { timeout: 30_000, message: "Waiting for the cancel to land" })
         .toMatch(new RegExp(TERMINAL_STATES.join("|")));
     }
-
-    const kanban = new KanbanPage(testPage);
-    await kanban.goto();
-    const card = kanban.taskCardByTitle(title);
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await card.click();
-    await expect(testPage).toHaveURL(/\/t\//, { timeout: 15_000 });
-
-    const session = new SessionPage(testPage);
-    await session.waitForLoad();
-
-    const terminalPanel = testPage.getByTestId("terminal-panel").first();
-    await expect(terminalPanel).toBeVisible({ timeout: 15_000 });
 
     // The assertion that matters: the reason is on screen.
     await expect(terminalPanel.getByTestId("passthrough-session-ended")).toBeVisible({
