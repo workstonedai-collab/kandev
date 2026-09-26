@@ -2,7 +2,6 @@ import { type Page } from "@playwright/test";
 import { test, expect } from "../../fixtures/test-base";
 import type { SeedData } from "../../fixtures/test-base";
 import type { ApiClient } from "../../helpers/api-client";
-import { KanbanPage } from "../../pages/kanban-page";
 import { SessionPage } from "../../pages/session-page";
 
 /**
@@ -274,23 +273,9 @@ test.describe("Session tab cleanup", () => {
       )
       .toBe(true);
 
-    const kanban = new KanbanPage(testPage);
-    await kanban.goto();
-    const card = kanban.taskCardByTitle("Single Session Tab Task");
-    // The session state is already terminal, but the board snapshot can still
-    // be from the preceding task-list read. Re-drive that read until the
-    // durable task appears instead of relying on a single stale render.
-    await expect
-      .poll(
-        async () => {
-          if (await card.isVisible().catch(() => false)) return true;
-          await kanban.goto();
-          return card.isVisible().catch(() => false);
-        },
-        { timeout: 30_000, message: "finished task should appear in the kanban snapshot" },
-      )
-      .toBe(true);
-    await card.click();
+    // The task is already complete. Open it directly because terminal tasks
+    // can be hidden by the board's current filters.
+    await testPage.goto(`/t/${task.id}`);
     await expect(testPage).toHaveURL(/\/t\//, { timeout: 15_000 });
 
     const session = new SessionPage(testPage);

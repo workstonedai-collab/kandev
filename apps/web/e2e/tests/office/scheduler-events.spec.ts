@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/office-fixture";
+import type { OfficeApiClient } from "../../helpers/office-api-client";
 
 /**
  * Reactive scheduler — event → run wire.
@@ -60,11 +61,29 @@ async function listAgentRuns(
   }
 }
 
+async function createSchedulerAgent(
+  officeApi: OfficeApiClient,
+  workspaceId: string,
+  agentProfileId: string,
+): Promise<string> {
+  const agent = await officeApi.createAgent(workspaceId, {
+    name: `Scheduler E2E ${Date.now()}`,
+    role: "worker",
+    agent_profile_id: agentProfileId,
+    executor_preference: JSON.stringify({ type: "local_pc" }),
+  });
+  const agentId = String(agent.id ?? "");
+  if (!agentId) throw new Error("Office scheduler test agent was not created");
+  await officeApi.updateAgentStatus(agentId, "idle");
+  return agentId;
+}
+
 test.describe("Office reactive scheduler", () => {
   test("assigning a task to an agent enqueues a task_assigned run", async ({
     apiClient,
     officeApi,
     officeSeed,
+    seedData,
     testPage,
   }) => {
     // Request the office fixture's page so its per-test reset clears runs and
@@ -72,13 +91,19 @@ test.describe("Office reactive scheduler", () => {
     void testPage;
     test.setTimeout(150_000);
 
-    // Create a task without an assignee, then attach the CEO.
+    const agentId = await createSchedulerAgent(
+      officeApi,
+      officeSeed.workspaceId,
+      seedData.agentProfileId,
+    );
+
+    // Create a task without an assignee, then attach its isolated test agent.
     const task = await apiClient.createTask(
       officeSeed.workspaceId,
       "Scheduler — task_assigned wire",
       { workflow_id: officeSeed.workflowId },
     );
-    await officeApi.assignTask(task.id, officeSeed.agentId);
+    await officeApi.assignTask(task.id, agentId);
 
     // Poll the agent's runs list — the subscriber path is async via
     // the event bus. We expect at least one task_assigned row whose
@@ -86,7 +111,7 @@ test.describe("Office reactive scheduler", () => {
     await expect
       .poll(
         async () => {
-          const runs = await listAgentRuns(apiClient, officeSeed.agentId);
+          const runs = await listAgentRuns(apiClient, agentId);
           return runs.filter((r) => r.reason === "task_assigned" && r.task_id === task.id);
         },
         { timeout: 120_000, message: "no task_assigned run surfaced for the new assignee" },
