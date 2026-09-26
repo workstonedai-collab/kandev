@@ -322,6 +322,7 @@ export const ChatInputContainer = forwardRef<ChatInputContainerHandle, ChatInput
     const isMoving = props.isMoving ?? false;
     const executorUnavailable = props.executorUnavailable ?? false;
     const isBusyVisual = isStarting || isMoving;
+    const useUncertainDeliveryControls = props.uncertainDelivery && p.isFailed;
 
     const s = useChatInputContainer({
       ref,
@@ -373,7 +374,7 @@ export const ChatInputContainer = forwardRef<ChatInputContainerHandle, ChatInput
       return null;
     }
 
-    if (composerRecovery?.model && taskId) {
+    if (composerRecovery?.model && taskId && !useUncertainDeliveryControls) {
       return (
         <>
           <SessionRecoveryCard
