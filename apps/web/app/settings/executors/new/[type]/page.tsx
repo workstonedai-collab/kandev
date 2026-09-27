@@ -363,6 +363,43 @@ function useCreateProfileSave(executorId: string) {
   return { saving, error, handleSave };
 }
 
+function CursorCloudProfileSettings({
+  form,
+  secrets,
+}: {
+  form: ReturnType<typeof useCreateProfileFormState>;
+  secrets: ReturnType<typeof useSecrets>["items"];
+}) {
+  return (
+    <CursorCloudConfigCard
+      secretId={form.cursorCloudSecretId}
+      baselineSecretId={null}
+      callbackUrl={form.cursorCloudCallbackUrl}
+      baselineCallbackUrl=""
+      secrets={secrets}
+      onSecretIdChange={form.setCursorCloudSecretId}
+      onCallbackUrlChange={form.setCursorCloudCallbackUrl}
+    />
+  );
+}
+
+function SpritesApiKeySettings({
+  form,
+  secrets,
+}: {
+  form: ReturnType<typeof useCreateProfileFormState>;
+  secrets: ReturnType<typeof useSecrets>["items"];
+}) {
+  return (
+    <SpritesApiKeyCard
+      secretId={form.spritesSecretId}
+      baselineSecretId={null}
+      onSecretIdChange={form.setSpritesSecretId}
+      secrets={secrets}
+    />
+  );
+}
+
 function CreateProfileSections({
   executorType,
   form,
@@ -376,24 +413,9 @@ function CreateProfileSections({
   return (
     <>
       <ProfileDetailsCard name={form.name} baselineName="" onNameChange={form.setName} />
-      {form.isSprites && (
-        <SpritesApiKeyCard
-          secretId={form.spritesSecretId}
-          baselineSecretId={null}
-          onSecretIdChange={form.setSpritesSecretId}
-          secrets={secrets}
-        />
-      )}
+      {form.isSprites && <SpritesApiKeySettings form={form} secrets={secrets} />}
       {executorType === "cursor_cloud" && (
-        <CursorCloudConfigCard
-          secretId={form.cursorCloudSecretId}
-          baselineSecretId={null}
-          callbackUrl={form.cursorCloudCallbackUrl}
-          baselineCallbackUrl=""
-          secrets={secrets}
-          onSecretIdChange={form.setCursorCloudSecretId}
-          onCallbackUrlChange={form.setCursorCloudCallbackUrl}
-        />
+        <CursorCloudProfileSettings form={form} secrets={secrets} />
       )}
       <CreateDockerSections form={form} />
       <CreateRemoteCredentialsSection executorType={executorType} form={form} secrets={secrets} />
