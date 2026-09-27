@@ -12,6 +12,7 @@ package agentruntime
 type Runtime string
 
 const (
+	RuntimeUnknown      Runtime = ""
 	RuntimeStandalone   Runtime = "standalone"
 	RuntimeDocker       Runtime = "docker"
 	RuntimeRemoteDocker Runtime = "remote_docker"
@@ -20,7 +21,8 @@ const (
 	RuntimeKubernetes   Runtime = "k8s"
 	// RuntimeCursorCloud identifies a provider-managed agent with no local
 	// process, shell, or workspace runtime.
-	RuntimeCursorCloud Runtime = "cursor_cloud"
+	RuntimeCursorCloud  Runtime = "cursor_cloud"
+	RuntimePluginRemote Runtime = "plugin_remote"
 )
 
 // IsContainerized reports whether the runtime hosts the agent
@@ -29,7 +31,7 @@ const (
 // decision gets reviewed; new constants default to host-mode.
 func (r Runtime) IsContainerized() bool {
 	switch r {
-	case RuntimeDocker, RuntimeRemoteDocker, RuntimeSprites, RuntimeKubernetes:
+	case RuntimeDocker, RuntimeRemoteDocker, RuntimeSprites, RuntimeKubernetes, RuntimePluginRemote:
 		return true
 	default:
 		return false

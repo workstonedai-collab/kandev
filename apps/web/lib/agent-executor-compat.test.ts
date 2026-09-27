@@ -44,4 +44,8 @@ describe("shouldFilterHandoffByHostHealth", () => {
       ),
     ).toBe(false);
   });
+
+  it("requires remote agent credentials for plugin executor profiles", () => {
+    expect(executorRequiresAgentCredentials("plugin_remote")).toBe(true);
+  });
 });

@@ -9,6 +9,8 @@ import type { ChatPanelState } from "./use-chat-panel-state";
 type ComposerPropsArgs = {
   panelState: ChatPanelState;
   composerWorkspaceId: string | null;
+  workspaceResolutionFailed: boolean;
+  onRetryWorkspaceResolution: () => void;
   isMoving: boolean;
   implementPlanHandler: ((fresh: boolean) => Promise<void> | Promise<boolean>) | undefined;
   executor: { unavailable: boolean; reason?: string };
@@ -37,6 +39,8 @@ export function useComposerProps(args: ComposerPropsArgs) {
   const {
     panelState,
     composerWorkspaceId,
+    workspaceResolutionFailed,
+    onRetryWorkspaceResolution,
     isMoving,
     implementPlanHandler,
     executor,
@@ -70,6 +74,8 @@ export function useComposerProps(args: ComposerPropsArgs) {
     sessionId: resolvedSessionId,
     taskId,
     workspaceId: composerWorkspaceId,
+    workspaceResolutionFailed,
+    onRetryWorkspaceResolution,
     entityReferencesEnabled: true as const,
     taskTitle: panelState.task?.title,
     taskDescription: panelState.taskDescription ?? "",

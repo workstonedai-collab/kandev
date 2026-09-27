@@ -34,6 +34,19 @@ type RouteOverride = lifecycle.RouteOverride
 type ExecutionReference = lifecycle.ExecutionReference
 type AgentStreamEventData = lifecycle.AgentStreamEventData
 type AgentStreamEventPayload = lifecycle.AgentStreamEventPayload
+type AgentExecution = lifecycle.AgentExecution
+type CachedModeState = lifecycle.CachedModeState
+
+// ErrNoExecutionForSession reports that a session has no live execution.
+var ErrNoExecutionForSession = lifecycle.ErrNoExecutionForSession
+
+// SessionExecutionControl is the runtime seam for looking up an execution by
+// session and applying a provider-supported session mode.
+type SessionExecutionControl interface {
+	GetExecutionBySessionID(sessionID string) (*AgentExecution, bool)
+	GetModeStateForSession(sessionID string) *CachedModeState
+	SetSessionMode(ctx context.Context, executionID, acpSessionID, modeID string) error
+}
 
 const (
 	ExecutionOwnerTask = lifecycle.ExecutionOwnerTask

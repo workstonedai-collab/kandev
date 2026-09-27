@@ -23,3 +23,18 @@ func TestExecutorTypeToBackendMapsCursorCloudWithoutStandaloneFallback(t *testin
 		t.Fatalf("ExecutorTypeToBackend(cursor_cloud) = %q, want %q", got, agentruntime.RuntimeCursorCloud)
 	}
 }
+
+func TestExecutorTypeToBackendDoesNotFallBackForUnknownOrPluginRemote(t *testing.T) {
+	if got := ExecutorTypeToBackend(models.ExecutorType("unknown-provider")); got != NameUnknown {
+		t.Fatalf("unknown executor mapped to %q, want NameUnknown", got)
+	}
+	if got := ExecutorTypeToBackend(models.ExecutorTypePluginRemote); got != NamePluginRemote {
+		t.Fatalf("plugin remote executor mapped to %q, want %q", got, NamePluginRemote)
+	}
+}
+
+func TestExecutorTypeToBackendPreservesLegacyLocalPCAlias(t *testing.T) {
+	if got := ExecutorTypeToBackend(models.ExecutorType("local_pc")); got != NameStandalone {
+		t.Fatalf("legacy local_pc executor mapped to %q, want %q", got, NameStandalone)
+	}
+}

@@ -73,6 +73,7 @@ export type SessionRecoveryFailure =
       outcome: "recovery_failed";
       resumeError: string;
       restoreError: string;
+      workspaceAttemptId?: string;
     }
   | {
       outcome: "status_unavailable";
@@ -211,7 +212,7 @@ type ResumeResponse = {
 
 type LaunchAttempt =
   | { ok: true; waiting?: boolean }
-  | { ok: false; error: Error; archived?: boolean };
+  | { ok: false; error: Error; archived?: boolean; workspaceAttemptId?: string };
 type FailedLaunchAttempt = Extract<LaunchAttempt, { ok: false }>;
 
 export function isTaskArchivedConflict(error: unknown): boolean {
@@ -338,7 +339,11 @@ function applyLaunchFailure(
   if (isWorkspaceRestoreRequest(request)) {
     settleWorkspaceRestoreFailure(workspaceAttempt, error, context);
   }
-  return { ok: false, error };
+  return {
+    ok: false,
+    error,
+    ...(workspaceAttempt?.attemptId ? { workspaceAttemptId: workspaceAttempt.attemptId } : {}),
+  };
 }
 
 function handleLaunchException(
@@ -355,7 +360,12 @@ function handleLaunchException(
   if (isWorkspaceRestoreRequest(request)) {
     settleWorkspaceRestoreFailure(workspaceAttempt, error, context);
   }
-  return { ok: false, error: toLaunchError(error), archived: false };
+  return {
+    ok: false,
+    error: toLaunchError(error),
+    archived: false,
+    ...(workspaceAttempt?.attemptId ? { workspaceAttemptId: workspaceAttempt.attemptId } : {}),
+  };
 }
 
 /** Launch a session via a request builder and apply the response. */
@@ -409,6 +419,9 @@ async function restoreAfterResumeFailure(
     outcome: "recovery_failed",
     resumeError: resumeAttempt.error.message,
     restoreError: restoreAttempt.error.message,
+    ...(restoreAttempt.workspaceAttemptId
+      ? { workspaceAttemptId: restoreAttempt.workspaceAttemptId }
+      : {}),
   });
   setters.setError(t("task:sessionRecoveryFailed"));
   return false;
