@@ -135,7 +135,7 @@ test.describe("queue admission reliability", () => {
       apiClient,
       seedData,
       "Queue admission final uncertainty",
-      { sleepSeconds: 60 },
+      { sleepSeconds: 60, startWithGeneratingTurn: true },
     );
     await waitForComposerQueueMode(session.activeChat());
 
