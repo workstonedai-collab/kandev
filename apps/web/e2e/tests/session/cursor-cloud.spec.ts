@@ -231,6 +231,9 @@ test("keeps an uncertain follow-up unresolved when its task is archived", async 
   expect(cursorCloud.prompts).toHaveLength(2);
 
   await apiClient.archiveTask(task.id);
+  await expect(testPage).not.toHaveURL(new RegExp(`/tasks/${task.id}$`));
+  await testPage.goto(`/tasks/${task.id}`);
+  await expect(testPage.getByTestId("cursor-cloud-task-surface")).toBeVisible();
   await expect(testPage.getByTestId("cursor-cloud-submission-unknown")).toBeVisible();
   await expect(testPage.getByTestId("chat-input-editor")).toHaveCount(0);
   const resolutionResponse = await testPage.request.get(

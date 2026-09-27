@@ -1555,19 +1555,19 @@ export class ApiClient {
         return;
       }
 
-      const text = await response.text();
+      const errorText = await response.text();
       let isStalePreview = false;
       if (response.status === 409) {
         try {
-          const payload = JSON.parse(text) as { error?: unknown };
-          isStalePreview = payload.error === "task deletion preview is no longer current";
+          isStalePreview =
+            (JSON.parse(errorText) as { error?: string }).error ===
+            "task deletion preview is no longer current";
         } catch {
-          isStalePreview = false;
+          // Only the documented stale-preview payload is retryable.
         }
       }
-      if (!isStalePreview || attempt === MAX_TASK_DELETE_PREVIEW_ATTEMPTS - 1) {
-        throw new Error(`API DELETE ${deletePath} failed (${response.status}): ${text}`);
-      }
+      if (isStalePreview && attempt < MAX_TASK_DELETE_PREVIEW_ATTEMPTS - 1) continue;
+      throw new Error(`API DELETE ${deletePath} failed (${response.status}): ${errorText}`);
     }
   }
 
