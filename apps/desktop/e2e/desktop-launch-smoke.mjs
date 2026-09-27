@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
@@ -333,7 +333,7 @@ async function waitForReadyInstances(instancesDir, count, tick) {
     .slice(0, count);
 }
 
-async function readInstances(instancesDir) {
+export async function readInstances(instancesDir) {
   const entries = await readdir(instancesDir, { withFileTypes: true });
   const instances = [];
   for (const entry of entries) {
@@ -343,7 +343,7 @@ async function readInstances(instancesDir) {
         JSON.parse(await readFile(join(instancesDir, entry.name, "instance.json"), "utf8")),
       );
     } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+      if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
     }
   }
   return instances;
@@ -495,8 +495,20 @@ async function runFakeRuntime(stateDir, args) {
     readyRequested: false,
     rootRequested: false,
   };
-  const saveRecord = () =>
-    writeFile(join(instanceDir, "instance.json"), JSON.stringify(record, null, 2));
+  const recordPath = join(instanceDir, "instance.json");
+  const pendingRecordWritePath = join(instanceDir, "instance.json.tmp");
+  let recordWrite = Promise.resolve();
+  const saveRecord = () => {
+    const serializedRecord = JSON.stringify(record, null, 2);
+    const nextWrite = recordWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await writeFile(pendingRecordWritePath, serializedRecord);
+        await rename(pendingRecordWritePath, recordPath);
+      });
+    recordWrite = nextWrite;
+    return nextWrite;
+  };
   await saveRecord();
   await writeFile(join(instanceDir, "launched"), JSON.stringify({ args, port }));
 
