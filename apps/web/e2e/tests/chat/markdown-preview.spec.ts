@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { type Page } from "@playwright/test";
 import { test, expect } from "../../fixtures/test-base";
-import { watchWs } from "../../helpers/causal-waits";
 import type { SeedData } from "../../fixtures/test-base";
 import type { ApiClient } from "../../helpers/api-client";
 import {
@@ -10,6 +9,14 @@ import {
   selectMarkdownPreviewText,
 } from "../../helpers/markdown-preview";
 import { SessionPage } from "../../pages/session-page";
+
+type E2EStoreWindow = Window & {
+  __KANDEV_E2E_STORE__?: {
+    getState: () => {
+      bumpWorkspaceFilesRefresh: (sessionId: string) => void;
+    };
+  };
+};
 
 const MARKDOWN_CONTENT = `# Hello World
 
@@ -44,6 +51,7 @@ async function seedTaskWithSession(
   apiClient: ApiClient,
   seedData: SeedData,
   title: string,
+  afterLoad?: (taskId: string, sessionId: string) => Promise<void>,
 ): Promise<{ session: SessionPage; sessionId: string }> {
   const task = await apiClient.createTaskWithAgent(
     seedData.workspaceId,
@@ -60,7 +68,30 @@ async function seedTaskWithSession(
   const session = new SessionPage(testPage);
   await session.waitForLoad();
   await session.waitForChatIdle({ timeout: 30_000 });
+  await afterLoad?.(task.id, task.session_id);
   return { session, sessionId: task.session_id };
+}
+
+async function taskRepositoryWorktreePath(
+  apiClient: ApiClient,
+  taskId: string,
+  sessionId: string,
+  repositoryId: string,
+): Promise<string> {
+  const [environment, { sessions }] = await Promise.all([
+    apiClient.getTaskEnvironment(taskId),
+    apiClient.listTaskSessions(taskId),
+  ]);
+  const session = sessions.find((candidate) => candidate.id === sessionId);
+  return (
+    environment?.repos?.find((repository) => repository.repository_id === repositoryId)
+      ?.worktree_path ??
+    session?.worktrees?.find((worktree) => worktree.repository_id === repositoryId)
+      ?.worktree_path ??
+    session?.worktree_path ??
+    session?.workspace_path ??
+    ""
+  );
 }
 
 /** Open a markdown file from the Files panel and enable preview mode. */
@@ -479,25 +510,50 @@ test.describe("Markdown preview", () => {
     testPage,
     apiClient,
     seedData,
-    backend,
   }) => {
     const fileName = "wrapped-code-comment.md";
     const wrappedLine = Array.from(
       { length: 80 },
       (_, i) => `wrapped-word-${i.toString().padStart(2, "0")}`,
     ).join(" ");
-    const repoDir = path.join(backend.tmpDir, "repos", "e2e-repo");
-    fs.writeFileSync(path.join(repoDir, fileName), `${wrappedLine}\n`);
 
-    const gateway = watchWs(testPage);
-    const treeResponse = gateway.waitForResponse("workspace.tree.get");
     const { session, sessionId } = await seedTaskWithSession(
       testPage,
       apiClient,
       seedData,
       "Markdown Code Wrapped Comment Test",
+      async (taskId, taskSessionId) => {
+        let worktreePath = "";
+        await expect
+          .poll(
+            async () => {
+              worktreePath = await taskRepositoryWorktreePath(
+                apiClient,
+                taskId,
+                taskSessionId,
+                seedData.repositoryId,
+              );
+              return Boolean(worktreePath && fs.existsSync(worktreePath));
+            },
+            {
+              timeout: 30_000,
+              message:
+                "Waiting for the markdown task environment to expose its repository worktree",
+            },
+          )
+          .toBe(true);
+        if (!worktreePath || !fs.existsSync(worktreePath)) {
+          throw new Error("the markdown task session did not expose its repository worktree");
+        }
+        fs.writeFileSync(path.join(worktreePath, fileName), `${wrappedLine}\n`);
+        await testPage.evaluate((sid) => {
+          const refreshFiles = (window as E2EStoreWindow).__KANDEV_E2E_STORE__?.getState()
+            .bumpWorkspaceFilesRefresh;
+          if (!refreshFiles) throw new Error("E2E workspace file refresh action is unavailable");
+          refreshFiles(sid);
+        }, taskSessionId);
+      },
     );
-    await treeResponse;
     await testPage.evaluate(
       ({ sid, pathName, codeContent }) => {
         window.sessionStorage.setItem(

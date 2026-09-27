@@ -5,6 +5,7 @@ import { test, expect } from "../../fixtures/test-base";
 import { waitForFiniteAnimations } from "../../helpers/animations";
 import { assertNoDocumentHorizontalOverflow } from "../../helpers/layout-assertions";
 import { makeGitEnv } from "../../helpers/git-helper";
+import { waitForHttp } from "../../helpers/causal-waits";
 
 test.describe("Mobile workspace repository sets", () => {
   test("scrolls a long branch list by touch without dismissing the editor", async ({
@@ -170,7 +171,15 @@ test.describe("Mobile workspace repository sets", () => {
     await expect(refreshButton).toBeVisible();
     await expect(refreshButton).toBeEnabled();
     await waitForFiniteAnimations(dropdown);
-    await refreshButton.tap({ force: true });
+    const refreshResponse = waitForHttp(
+      testPage,
+      "GET",
+      new RegExp(`/api/v1/repositories/${seedData.repositoryId}/branches$`),
+      { predicate: (response) => new URL(response.url()).searchParams.get("refresh") === "true" },
+    );
+    await refreshButton.tap();
+    expect((await refreshResponse).ok()).toBe(true);
+    await expect(dropdown).toBeVisible();
     await expect(dropdown.getByRole("option", { name: /^origin\/main origin/ })).toBeVisible();
 
     const dropdownBox = await dropdown.boundingBox();

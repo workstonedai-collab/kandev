@@ -1,5 +1,7 @@
 import { type Page } from "@playwright/test";
 import { test as base, expect } from "../../fixtures/test-base";
+import type { SeedData } from "../../fixtures/test-base";
+import type { ApiClient } from "../../helpers/api-client";
 import { OfficeApiClient } from "../../helpers/office-api-client";
 import { waitForOfficeTaskSessionLive } from "../../helpers/office-launch";
 
@@ -16,11 +18,12 @@ import { waitForOfficeTaskSessionLive } from "../../helpers/office-launch";
 
 type AdvancedModeFixtures = {
   officeApi: OfficeApiClient;
-  advancedSeed: {
-    workspaceId: string;
-    agentId: string;
-    taskId: string;
-  };
+};
+
+type AdvancedModeSeed = {
+  workspaceId: string;
+  agentId: string;
+  taskId: string;
 };
 
 const test = base.extend<{ testPage: Page }, AdvancedModeFixtures>({
@@ -30,47 +33,50 @@ const test = base.extend<{ testPage: Page }, AdvancedModeFixtures>({
     },
     { scope: "worker" },
   ],
-
-  advancedSeed: [
-    async ({ officeApi, apiClient, seedData }, use) => {
-      const result = (await officeApi.completeOnboarding({
-        workspaceName: "Advanced Mode Workspace",
-        taskPrefix: "AM",
-        agentName: "CEO",
-        agentProfileId: seedData.agentProfileId,
-        executorPreference: "local_pc",
-        taskTitle: "present yourself",
-        taskDescription: "say your name",
-      })) as { workspaceId: string; agentId: string; projectId: string; taskId?: string };
-
-      if (!result.taskId) {
-        throw new Error("completeOnboarding did not return a taskId");
-      }
-
-      // Wait for the agent runtime to come up. We only need it to have
-      // *started* — the test pages exercise the live session once the
-      // dockview mounts, they don't require a finished turn.
-      await waitForOfficeTaskSessionLive(apiClient, result.taskId);
-
-      await use({
-        workspaceId: result.workspaceId,
-        agentId: result.agentId,
-        taskId: result.taskId,
-      });
-    },
-    { scope: "worker" },
-  ],
-
-  testPage: async ({ testPage: basePage, apiClient, advancedSeed, seedData }, use) => {
-    await apiClient.saveUserSettings({
-      workspace_id: advancedSeed.workspaceId,
-      workflow_filter_id: seedData.workflowId,
-      keyboard_shortcuts: {},
-      enable_preview_on_click: false,
-    });
-    await use(basePage);
-  },
 });
+
+async function seedAdvancedModeTask(
+  officeApi: OfficeApiClient,
+  apiClient: ApiClient,
+  seedData: SeedData,
+): Promise<AdvancedModeSeed> {
+  const result = (await officeApi.completeOnboarding({
+    workspaceName: "Advanced Mode Workspace",
+    taskPrefix: "AM",
+    agentName: "CEO",
+    agentProfileId: seedData.agentProfileId,
+    executorPreference: "local_pc",
+    taskTitle: "present yourself",
+    taskDescription: "say your name",
+  })) as { workspaceId: string; agentId: string; projectId: string; taskId?: string };
+
+  if (!result.taskId) {
+    throw new Error("completeOnboarding did not return a taskId");
+  }
+
+  await apiClient.saveUserSettings({
+    workspace_id: result.workspaceId,
+    workflow_filter_id: seedData.workflowId,
+    keyboard_shortcuts: {},
+    enable_preview_on_click: false,
+  });
+
+  // Seed after each test's profile reset so this Office runner never refers to
+  // a profile that the next reset can remove.
+  await waitForOfficeTaskSessionLive(apiClient, result.taskId);
+  await expect
+    .poll(async () => (await apiClient.getTaskEnvironment(result.taskId!))?.status, {
+      timeout: 30_000,
+      message: "Waiting for the Office task environment to become ready",
+    })
+    .toBe("ready");
+
+  return {
+    workspaceId: result.workspaceId,
+    agentId: result.agentId,
+    taskId: result.taskId,
+  };
+}
 
 /**
  * Navigate to issue simple mode first (so sessions load), then switch to
@@ -94,9 +100,12 @@ test.describe("Office advanced mode", () => {
 
   test("dockview layout renders with chat, files, changes, and terminal panels", async ({
     testPage,
-    advancedSeed,
+    officeApi,
+    apiClient,
+    seedData,
   }) => {
     test.setTimeout(45_000);
+    const advancedSeed = await seedAdvancedModeTask(officeApi, apiClient, seedData);
 
     await enterAdvancedMode(testPage, advancedSeed.taskId);
 
@@ -112,9 +121,12 @@ test.describe("Office advanced mode", () => {
 
   test("chat panel shows agent messages from completed session", async ({
     testPage,
-    advancedSeed,
+    officeApi,
+    apiClient,
+    seedData,
   }) => {
     test.setTimeout(45_000);
+    const advancedSeed = await seedAdvancedModeTask(officeApi, apiClient, seedData);
 
     await enterAdvancedMode(testPage, advancedSeed.taskId);
 
@@ -128,8 +140,14 @@ test.describe("Office advanced mode", () => {
     await expect(chatPanel.getByText("No messages yet")).not.toBeVisible({ timeout: 15_000 });
   });
 
-  test("files panel shows workspace content", async ({ testPage, advancedSeed }) => {
+  test("files panel shows workspace content", async ({
+    testPage,
+    officeApi,
+    apiClient,
+    seedData,
+  }) => {
     test.setTimeout(45_000);
+    const advancedSeed = await seedAdvancedModeTask(officeApi, apiClient, seedData);
 
     await enterAdvancedMode(testPage, advancedSeed.taskId);
 
@@ -141,8 +159,14 @@ test.describe("Office advanced mode", () => {
     await expect(filesPanel.getByText(".gitkeep")).toBeVisible({ timeout: 15_000 });
   });
 
-  test("terminal connects to agent execution workspace", async ({ testPage, advancedSeed }) => {
+  test("terminal connects to agent execution workspace", async ({
+    testPage,
+    officeApi,
+    apiClient,
+    seedData,
+  }) => {
     test.setTimeout(60_000);
+    const advancedSeed = await seedAdvancedModeTask(officeApi, apiClient, seedData);
 
     await enterAdvancedMode(testPage, advancedSeed.taskId);
 
@@ -158,9 +182,12 @@ test.describe("Office advanced mode", () => {
 
   test("navigating between simple and advanced mode preserves session", async ({
     testPage,
-    advancedSeed,
+    officeApi,
+    apiClient,
+    seedData,
   }) => {
     test.setTimeout(45_000);
+    const advancedSeed = await seedAdvancedModeTask(officeApi, apiClient, seedData);
 
     // Start in advanced mode
     await enterAdvancedMode(testPage, advancedSeed.taskId);
