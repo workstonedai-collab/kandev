@@ -2,6 +2,8 @@ import type {
   GitIdentityMode,
   GitIdentityState,
 } from "@/components/settings/profile-edit/remote-credentials-card";
+import type { AdditionalNetworkRow } from "@/components/settings/profile-edit/use-docker-networks-form-state";
+import { applyDockerNetworks } from "@/components/settings/profile-edit/build-docker-network-config";
 import { buildCursorCloudProfileConfig } from "@/components/settings/profile-edit/cursor-cloud-profile-config";
 import type { NetworkPolicyRule } from "@/lib/api/domains/settings-api";
 
@@ -24,6 +26,9 @@ type BuildProfileConfigInput = {
   dockerfile: string;
   imageTag: string;
   allowUserNamespaces: boolean;
+  primaryNetwork: string;
+  primaryGwPriority: string;
+  additionalNetworks: AdditionalNetworkRow[];
 };
 
 export function buildProfileConfig(
@@ -83,4 +88,5 @@ function applyDockerCreateConfig(
   if (input.isDocker && input.dockerfile.trim()) config.dockerfile = input.dockerfile;
   if (input.isDocker && input.imageTag.trim()) config.image_tag = input.imageTag.trim();
   if (input.isLocalDocker && input.allowUserNamespaces) config.allow_user_namespaces = "true";
+  applyDockerNetworks(config, input);
 }
