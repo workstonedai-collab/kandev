@@ -19,6 +19,7 @@ import (
 	"errors"
 	"time"
 
+	client "github.com/kandev/kandev/internal/agent/runtime/agentctl"
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
 	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
@@ -36,6 +37,14 @@ type AgentStreamEventData = lifecycle.AgentStreamEventData
 type AgentStreamEventPayload = lifecycle.AgentStreamEventPayload
 type AgentExecution = lifecycle.AgentExecution
 type CachedModeState = lifecycle.CachedModeState
+type IdleSuspensionIdentity = lifecycle.IdleSuspensionIdentity
+type BackgroundWorkloadProbeResult = client.ProbeResult
+
+const (
+	BackgroundWorkloadProbeResultLive    = client.ProbeResultLive
+	BackgroundWorkloadProbeResultSettled = client.ProbeResultSettled
+	BackgroundWorkloadProbeResultUnknown = client.ProbeResultUnknown
+)
 
 // ErrNoExecutionForSession reports that a session has no live execution.
 var ErrNoExecutionForSession = lifecycle.ErrNoExecutionForSession
@@ -77,6 +86,10 @@ type Runtime interface {
 	// Stop terminates an execution and records the supplied reason.
 	Stop(ctx context.Context, executionID string, reason string) error
 
+	// SuspendIdle stops one settled task execution while preserving its
+	// durable conversation identity for the policy-driven resume path.
+	SuspendIdle(ctx context.Context, identity IdleSuspensionIdentity) error
+
 	// GetExecution returns a snapshot view of an execution by ID.
 	GetExecution(ctx context.Context, executionID string) (*Execution, error)
 
@@ -87,6 +100,9 @@ type Runtime interface {
 
 	// SetMcpMode swaps the MCP tool mode for a running execution.
 	SetMcpMode(ctx context.Context, executionID string, mode string) error
+
+	// ExecuteBackgroundWorkAction executes an action on a background workload in the running execution.
+	ExecuteBackgroundWorkAction(ctx context.Context, executionID string, req streams.BackgroundWorkActionRequest) (streams.BackgroundWorkActionResponse, error)
 }
 
 // LaunchSpec carries everything the runtime needs to start an agent.
@@ -199,6 +215,7 @@ type Backend interface {
 	StopAgentWithReason(ctx context.Context, executionID string, reason string, force bool) error
 	GetExecution(executionID string) (*lifecycle.AgentExecution, bool)
 	SetMcpMode(ctx context.Context, executionID string, mode string) error
+	ExecuteBackgroundWorkAction(ctx context.Context, executionID string, req streams.BackgroundWorkActionRequest) (streams.BackgroundWorkActionResponse, error)
 }
 
 // Compile-time check: the lifecycle Manager satisfies Backend.

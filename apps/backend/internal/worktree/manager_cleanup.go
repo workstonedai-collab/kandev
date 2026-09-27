@@ -87,9 +87,11 @@ const (
 )
 
 type worktreeRegistration struct {
-	path   string
-	head   string
-	branch string
+	path     string
+	head     string
+	branch   string
+	locked   bool
+	prunable bool
 }
 
 type worktreeRegistrationOwnershipOptions struct {
@@ -113,6 +115,10 @@ func inspectWorktreeRegistrationOwnershipWithOptions(
 	cmd.Dir = repoPath
 	output, err := runGitCmdCombinedOutput(ctx, cmd)
 	if err != nil {
+		outStr := strings.TrimSpace(string(output))
+		if outStr != "" {
+			return worktreeRegistrationAbsent, fmt.Errorf("git worktree list failed: %s: %w", outStr, err)
+		}
 		return worktreeRegistrationAbsent, err
 	}
 	wantPath, err := normalizedWorktreeTargetPath(worktreePath)
@@ -138,6 +144,10 @@ func parseWorktreeRegistrations(output string) []worktreeRegistration {
 			registrations[current].head = strings.TrimPrefix(field, "HEAD ")
 		case current >= 0 && strings.HasPrefix(field, "branch "):
 			registrations[current].branch = strings.TrimPrefix(field, "branch ")
+		case current >= 0 && (field == "locked" || strings.HasPrefix(field, "locked ")):
+			registrations[current].locked = true
+		case current >= 0 && (field == "prunable" || strings.HasPrefix(field, "prunable ")):
+			registrations[current].prunable = true
 		}
 	}
 	return registrations

@@ -28,6 +28,7 @@ import (
 	agentsettingshandlers "github.com/kandev/kandev/internal/agent/settings/handlers"
 	settingsstore "github.com/kandev/kandev/internal/agent/settings/store"
 	"github.com/kandev/kandev/internal/agentctl/tracing"
+	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	analyticshandlers "github.com/kandev/kandev/internal/analytics/handlers"
 	analyticsrepository "github.com/kandev/kandev/internal/analytics/repository"
 	"github.com/kandev/kandev/internal/auth"
@@ -614,18 +615,29 @@ func appendAvailableCommandsMessage(sessionID string, session *models.TaskSessio
 
 // appendSessionModeMessage adds session mode state notification to result if cached.
 func appendSessionModeMessage(sessionID string, session *models.TaskSession, lifecycleMgr *lifecycle.Manager, result []*ws.Message) []*ws.Message {
-	if lifecycleMgr == nil {
+	var modeState *lifecycle.CachedModeState
+	if lifecycleMgr != nil {
+		modeState = lifecycleMgr.GetModeStateForSession(sessionID)
+	}
+	snapshot, hasSnapshot := lifecycle.LoadSessionModelsSnapshot(session.Metadata[models.SessionMetaKeyACPModelState])
+	if modeState == nil && hasSnapshot {
+		modeState = &lifecycle.CachedModeState{CurrentModeID: snapshot.CurrentModeID}
+	}
+	if modeState == nil {
 		return result
 	}
-	modeState := lifecycleMgr.GetModeStateForSession(sessionID)
-	if modeState == nil || (modeState.CurrentModeID == "" && len(modeState.AvailableModes) == 0) {
+	hasKnownMode := modeState.CurrentModeID != "" || len(modeState.AvailableModes) > 0
+	hasExplicitUnknownMode := hasSnapshot && (snapshot.SettingsAttemptID != "" ||
+		snapshot.SettingsPolicy == streams.SessionSettingsPolicyProviderRestored)
+	if !hasKnownMode && !hasExplicitUnknownMode {
 		return result
 	}
 	notification, err := ws.NewNotification(ws.ActionSessionModeChanged, lifecycle.SessionModeEventPayload{
-		TaskID:         session.TaskID,
-		SessionID:      sessionID,
-		CurrentModeID:  modeState.CurrentModeID,
-		AvailableModes: modeState.AvailableModes,
+		TaskID:                session.TaskID,
+		SessionID:             sessionID,
+		CurrentModeID:         modeState.CurrentModeID,
+		SessionSettingsPolicy: sessionSettingsProjectionPolicyFromSnapshot(snapshot, hasSnapshot),
+		AvailableModes:        modeState.AvailableModes,
 	})
 	if err == nil {
 		result = append(result, notification)
@@ -635,19 +647,22 @@ func appendSessionModeMessage(sessionID string, session *models.TaskSession, lif
 
 // appendSessionModelsMessage adds session models state notification to result if cached.
 func appendSessionModelsMessage(sessionID string, session *models.TaskSession, lifecycleMgr *lifecycle.Manager, result []*ws.Message) []*ws.Message {
-	if lifecycleMgr == nil {
-		return result
+	var modelState *lifecycle.CachedModelState
+	if lifecycleMgr != nil {
+		modelState = lifecycleMgr.GetModelStateForSession(sessionID)
 	}
 	return appendSessionModelsMessageFromState(
 		sessionID,
 		session,
-		lifecycleMgr.GetModelStateForSession(sessionID),
+		modelState,
 		result,
 	)
 }
 
 func appendSessionModelsMessageFromState(sessionID string, session *models.TaskSession, modelState *lifecycle.CachedModelState, result []*ws.Message) []*ws.Message {
 	snapshot, hasSnapshot := lifecycle.LoadSessionModelsSnapshot(session.Metadata[models.SessionMetaKeyACPModelState])
+	providerRestored := hasSnapshot && snapshot.SettingsPolicy == streams.SessionSettingsPolicyProviderRestored
+	hasAttemptSnapshot := hasSnapshot && snapshot.SettingsAttemptID != ""
 	var replayState lifecycle.CachedModelState
 	if modelState == nil {
 		if !hasSnapshot {
@@ -674,22 +689,33 @@ func appendSessionModelsMessageFromState(sessionID string, session *models.TaskS
 	}
 	replayState.ConfigOptionsSettled = replayState.ConfigOptionsSettled || snapshot.ConfigOptionsSettled
 	if replayState.CurrentModelID == "" && len(replayState.Models) == 0 &&
-		len(replayState.ConfigOptions) == 0 && !replayState.ConfigOptionsSettled {
+		len(replayState.ConfigOptions) == 0 && !replayState.ConfigOptionsSettled && !providerRestored && !hasAttemptSnapshot {
 		return result
 	}
 	notification, err := ws.NewNotification(ws.ActionSessionModelsUpdated, lifecycle.SessionModelsEventPayload{
-		TaskID:               session.TaskID,
-		SessionID:            sessionID,
-		CurrentModelID:       replayState.CurrentModelID,
-		Models:               replayState.Models,
-		ConfigOptions:        replayState.ConfigOptions,
-		ConfigOptionsSettled: replayState.ConfigOptionsSettled || snapshot.ConfigOptionsSettled,
-		ConfigBaseline:       sessionACPConfigBaseline(session),
+		TaskID:                session.TaskID,
+		SessionID:             sessionID,
+		CurrentModelID:        replayState.CurrentModelID,
+		SessionSettingsPolicy: sessionSettingsProjectionPolicyFromSnapshot(snapshot, hasSnapshot),
+		Models:                replayState.Models,
+		ConfigOptions:         replayState.ConfigOptions,
+		ConfigOptionsSettled:  replayState.ConfigOptionsSettled || snapshot.ConfigOptionsSettled,
+		ConfigBaseline:        sessionACPConfigBaseline(session),
 	})
 	if err == nil {
 		result = append(result, notification)
 	}
 	return result
+}
+
+func sessionSettingsProjectionPolicyFromSnapshot(
+	snapshot lifecycle.SessionModelsSnapshot,
+	hasSnapshot bool,
+) streams.SessionSettingsPolicy {
+	if hasSnapshot && snapshot.SettingsPolicy == streams.SessionSettingsPolicyProviderRestored {
+		return streams.SessionSettingsPolicyProviderRestored
+	}
+	return streams.SessionSettingsPolicyStrict
 }
 
 func sessionACPConfigBaseline(session *models.TaskSession) map[string]string {
@@ -740,6 +766,7 @@ type routeParams struct {
 	addCleanup                    func(func() error)
 	repoCloner                    *repoclone.Cloner
 	version                       string
+	commit                        string
 	webInternalURL                string
 	webTitlePrefix                string
 	devMode                       bool
@@ -1335,6 +1362,7 @@ func registerTaskRoutes(p routeParams, planService *taskservice.PlanService, han
 	workflowH.SetForegroundActivityProvider(p.orchestratorSvc)
 	workflowH.SetTaskParkedProvider(p.orchestratorSvc)
 	taskH := taskhandlers.RegisterTaskRoutes(p.router, p.gateway.Dispatcher, p.taskSvc, p.orchestratorSvc, p.taskRepo, planService, p.log)
+	taskH.SetBackgroundWorkEnabled(p.features.AgentBackgroundWork)
 	if p.services != nil && p.services.User != nil {
 		taskH.SetTaskCreateLastUsedRecorder(p.services.User)
 		taskH.SetAgentProfileRecentUseRecorder(p.services.User)
@@ -1511,7 +1539,7 @@ func registerSecondaryRoutes(
 			p.taskRepo,
 			p.services.Task,
 			p.agentRegistry,
-			lifecycle.NewAgentctlResolver(p.log),
+			newSSHAgentctlResolver(p),
 			p.log,
 			p.taskRepo,
 			reachabilityPoller,
@@ -1685,6 +1713,15 @@ func registerSecondaryRoutes(
 		mountOfficeRoutes(p.router, p.services.OfficeSvcs, p.authSvc, p.taskSvc, p.officeRepo, handoffSvc, handoffDeps, p.log)
 		p.log.Debug("Registered Office handlers (HTTP)")
 	}
+}
+
+func newSSHAgentctlResolver(p routeParams) *lifecycle.AgentctlResolver {
+	return lifecycle.NewAgentctlResolverWithOptions(p.log, lifecycle.AgentctlResolverOptions{
+		Version:   p.version,
+		Commit:    p.commit,
+		BundleDir: os.Getenv("KANDEV_BUNDLE_DIR"),
+		HomeDir:   p.homeDir,
+	})
 }
 
 // integrationWorkspacePrefixes are the workspace-scoped third-party
@@ -2065,6 +2102,9 @@ func registerMCPAndDebugRoutes(
 	mcpHandlers.SetRemoteContributionService(newRemoteContributionCoordinator(p.services.GitHub, p.services.GitLab))
 	// Wire config-mode dependencies for agent-native configuration
 	mcpHandlers.SetConfigDeps(p.services.Workflow, p.agentSettingsController, p.mcpConfigSvc)
+	if p.agentSettingsController != nil {
+		mcpHandlers.SetAgentProfileVerifier(p.agentSettingsController)
+	}
 	if p.services.Automation != nil {
 		mcpHandlers.SetAutomationCreator(p.services.Automation.Service)
 	}
@@ -2108,6 +2148,7 @@ func registerMCPAndDebugRoutes(
 	mcpHandlers.SetSessionCeilingReleaser(p.orchestratorSvc)
 	mcpHandlers.SetPromptReferenceResolver(p.services.Prompts)
 	mcpHandlers.SetPromptReader(p.services.Prompts)
+	mcpHandlers.SetPromptWriter(p.services.Prompts, func() bool { return p.authSvc != nil && p.authSvc.Mode() != auth.ModeDisabled })
 	mcpHandlers.SetTaskStopper(p.orchestratorSvc)
 	mcpHandlers.SetAgentPermissionService(p.orchestratorSvc)
 	mcpHandlers.SetTaskTitleBranchRenamer(p.orchestratorSvc)

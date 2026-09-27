@@ -509,10 +509,12 @@ type AgentProfileInfo struct {
 
 // LaunchAgentRequest contains parameters for launching an agent
 type LaunchAgentRequest struct {
-	TaskID            string
-	WorkspaceID       string // Kandev workspace ID — used to build scratch dir for repo-less tasks
-	SessionID         string
-	TaskEnvironmentID string // Env owning this session (shared across sessions in the same task)
+	TaskID                string
+	TaskScope             lifecycle.TaskLaunchScope
+	SessionSettingsPolicy ResumeSettingsPolicy
+	WorkspaceID           string // Kandev workspace ID — used to build scratch dir for repo-less tasks
+	SessionID             string
+	TaskEnvironmentID     string // Env owning this session (shared across sessions in the same task)
 	// WorkspaceReuseRequired selects attach-only preparation of an already-ready
 	// task environment. It must never be inferred from a sibling execution ID.
 	WorkspaceReuseRequired bool
@@ -705,15 +707,20 @@ type LaunchOptions struct {
 	// process is started. Callers use this boundary to bind turn-scoped
 	// evidence to the execution that actually won admission.
 	OnExecutionAdmitted func(executionID string)
-	Prompt              string
-	PriorACPSession     string // ACP session ID to resume for the same concrete profile
-	WorkflowStepID      string
-	StartAgent          bool
-	McpMode             string // MCP tool mode: empty task default, McpModeTaskTitlePending, McpModeConfig, McpModeOffice, or McpModeAutomation
-	McpProfile          *mcpprofile.Context
-	Attachments         []v1.MessageAttachment
-	AutoCreatePR        bool
-	Env                 map[string]string
+	// OnInitialPromptAccepted transfers startup ownership after lifecycle reports
+	// that the initial prompt was accepted by the provider. OnInitialPromptFailed
+	// closes that ownership when delivery fails before acceptance.
+	OnInitialPromptAccepted func(executionID string)
+	OnInitialPromptFailed   func()
+	Prompt                  string
+	PriorACPSession         string // ACP session ID to resume for the same concrete profile
+	WorkflowStepID          string
+	StartAgent              bool
+	McpMode                 string // MCP tool mode: empty task default, McpModeTaskTitlePending, McpModeConfig, McpModeOffice, or McpModeAutomation
+	McpProfile              *mcpprofile.Context
+	Attachments             []v1.MessageAttachment
+	AutoCreatePR            bool
+	Env                     map[string]string
 	// RefuseIfAgentRunning makes peer-message admission fail closed when the
 	// selected session already has an active agent. Other internal launch paths
 	// retain their existing workspace reuse behavior.

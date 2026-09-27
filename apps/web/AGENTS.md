@@ -79,11 +79,11 @@ lib/api/domains/                    # API clients
 
 `chatMotion` owns per-device chat animation preview and persistence; `useChatMotion` applies OS reduced motion. Keep it separate from `richOutputMotion` and transcript auto-scroll. Quick Chat stores server conversations in `quickChat.sessions` and browser-local terminals in `quickChat.terminalTabs`; `activeKind` and terminal IDs track selection. `quick-terminal-actions.ts` owns lifecycle/fallback; terminal descriptors never enter conversation APIs or get lost in reconciliation.
 
-**Hydration:** Go injects `window.__KANDEV_BOOT_PAYLOAD__` into the SPA shell before React mounts. `lib/state/hydration/merge-strategies.ts` has `deepMerge()`, `mergeSessionMap()`, `mergeLoadingState()` to avoid overwriting live client state. Pass `activeSessionId` to protect active sessions.
+**Hydration:** Go injects `window.__KANDEV_BOOT_PAYLOAD__` into the SPA shell before React mounts. `lib/state/hydration/merge-strategies.ts` has `deepMerge()`, `mergeSessionMap()`, `mergeLoadingState()` to avoid overwriting live client state. Pass `activeSessionId` to protect active sessions. Client task navigation uses `fetchTaskNavigationData` for essential task/session hydration. Render current-workspace task projections during refresh; leave optional enrichment to domain hooks instead of repeating the full boot bundle. Read-cursor capture and automatic session creation wait for authoritative route hydration. Do not replay cached hydration snapshots over live state.
 
 For rebasing or finishing PRs written against the old Next.js runtime, follow [`docs/nextjs-spa-migration.md`](../../docs/nextjs-spa-migration.md).
 
-**Hooks Pattern:** Hooks in `hooks/domains/` encapsulate WS subscriptions and store selection; the WS client deduplicates subscriptions. The bounded `useSystemInfo` TanStack Query pilot owns only the About view's `/api/v1/system/info` snapshot and request state, scoped by canonical full API base URL, page boot ID, and auth identity. The boot payload remains unchanged; other System resources stay in Zustand, while process-generation/restart/update probes remain independent no-store reads. See the [ownership decision](../../docs/decisions/2026-09-26-system-info-query-cache-ownership.md) and [system design](../../docs/specs/platform/system-design/system-info-query-cache.md).
+**Hooks Pattern:** Hooks in `hooks/domains/` encapsulate WS subscriptions and store selection; the WS client deduplicates subscriptions. The bounded `useSystemInfo` TanStack Query pilot owns only the About view's `/api/v1/system/info` snapshot and request state, scoped by canonical full API base URL, page boot ID, and auth identity. The boot payload remains unchanged; other System resources stay in Zustand, while process-generation/restart/update probes remain independent no-store reads. See the [ownership decision](../../docs/decisions/2026-09-26-system-info-query-cache-ownership.md) and [system design](../../docs/specs/platform/system-design/system-info-query-cache.md). Shell/commit/diff reads share `lib/state/session-read-coordinator.ts` through `use-session-read.ts`; pass the owning store to invalidation and preserve scope, environment-mapping, and late-response guards. Inactive snapshots are bounded at 32 per resource. Files retains four trees/20,000 metadata nodes and restores up to four independent folders concurrently. See the [navigation design](../../docs/specs/ui/system-design/task-navigation-responsiveness.md), including phone session-to-environment binding.
 
 ## WebSockets
 
@@ -113,7 +113,7 @@ surface.
   browser-native behavior for the Vite SPA while legacy Next entrypoints are
   phased out.
 - Task links: `lib/links.ts::linkToTask` is the only `/t/:taskId` builder; pass raw IDs, use `TaskLink` or `AppLink`, and use `linkToTask` for router pushes. Keep compatibility `/tasks/:id`, Office/API paths, and route-recognition prefixes separate.
-- Components stay under 200 lines; extract domain components. Hooks belong in `hooks/domains/` and encapsulate subscription plus selection.
+- Components stay under 200 lines; extract domain components. Hooks belong in `hooks/domains/` and encapsulate subscription plus selection. `ChangesPanelBody` owns the sole scroller; route working-tree, PR, commit, inline-file, and status row descriptors through `ChangesTimelineViewport`, keeping full collections for counts/actions and keying state by task/session/environment.
 - **Code-host dashboards:** GitHub, GitLab, and plugin code-host pages must use
   the provider-neutral primitives in `components/integrations/` for
   change-request lists, rows, toolbars, scope controls, task preset menus, and
@@ -291,7 +291,7 @@ and `lib/plugins/types.ts` are its detailed host implementation — all three mu
 
 ## Sidebar task views
 
-`sidebarViewsByWorkspace` stores personal view state by workspace ID. Use `selectSidebarViews`, preserve workspace identity through async saves and rollback, and keep `sidebarViews` only for legacy wire/hydration compatibility. The backend owns migration/defaults; writes use scoped `sidebar_view_state`, never legacy global fields.
+`sidebarViewsByWorkspace` stores personal view state by workspace ID. Use `selectSidebarViews`, preserve workspace identity through async saves and rollback, and keep `sidebarViews` only for legacy wire/hydration compatibility. The backend owns migration/defaults; writes use scoped `sidebar_view_state`, never legacy global fields. `SidebarTaskPageCache` is scoped to the app store and shares requests across sidebar consumers. It retains at most five first pages, 2 MiB, for five minutes from fetch; later pages remain display-only. Complete query identity and workspace/account generations fence reuse. Query revisions clear reusable pages, and summary changes invalidate affected snapshots before lookup. Access denial notifies every mounted consumer to clear displayed rows and cancel outstanding reads. Keep query status in `SidebarTaskQueryStatus`; do not also render query failures as archive errors.
 
 ## Testing notes
 

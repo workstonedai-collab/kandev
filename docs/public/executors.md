@@ -14,6 +14,17 @@ An executor determines where Kandev creates a task environment and runs `agentct
 3. Choose Docker, Kubernetes, SSH, or Sprites when the host boundary or remote location is part of the requirement.
 4. Review credentials, scripts, mounts, and network policy as part of the executor trust boundary.
 
+## Stable remote helpers
+
+Stable standard installs include a manifest for remote helpers. They do not include the helper
+executables. On the first remote task for a platform, Kandev downloads that Stable release's helper
+when no verified copy is cached. It checks the helper digest from the installed manifest before use.
+
+The Kandev host needs outbound HTTPS to `github.com` and `release-assets.githubusercontent.com`.
+GitHub redirects release-asset downloads to the second host. If network access is not available,
+install a full CLI archive or set an existing helper-path override. A full Stable Desktop installer
+or updater is not available. Containers and npm Nightlies include all remote helpers.
+
 ## Current support
 
 | Executor      | Current status                                                                                 | Workspace                                                               | Use it when                                                                                                                        |

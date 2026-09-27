@@ -216,6 +216,7 @@ func initCoreTaskServices(
 	userSvc := userservice.NewService(repos.User, eventBus, log)
 	editorSvc := editorservice.NewService(repos.Editor, repos.Task, userSvc)
 	promptSvc := promptservice.NewService(repos.Prompts)
+	promptSvc.SetEventBus(eventBus, log)
 	utilitySvc := utilityservice.NewService(repos.Utility)
 	utilitySvc.SetProfileResolver(profilebinding.New(repos.AgentSettings, func(agentID string) bool {
 		if agentID == agents.DynamicAgentID {
@@ -260,6 +261,7 @@ func initCoreTaskServices(
 			TaskActivity:      repos.Task,
 			SubagentContexts:  repos.Task,
 			Usage:             repos.Task,
+			BackgroundWork:    repos.Task,
 			AgentProfiles:     repos.AgentSettings,
 			AgentProfileExecutorValidator: taskAgentExecutorCompatibilityValidator{
 				profiles:           repos.AgentSettings,

@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -61,6 +62,23 @@ func TestWorktreeRecoveryFailureIsActionableWithoutRetryActions(t *testing.T) {
 	}
 }
 
+func TestMainCheckoutInspectionTimeoutRemainsRetryable(t *testing.T) {
+	inspectionErr := fmt.Errorf("git inspection timed out: %w", context.DeadlineExceeded)
+	classification := classifyLaunchFailure(inspectionErr)
+	if classification.noRetry {
+		t.Fatal("inspection timeout was classified as a no-retry metadata refusal")
+	}
+	if classification.code != models.LaunchErrorCategoryGenericLaunchFailure {
+		t.Fatalf("classification code = %q, want generic launch failure", classification.code)
+	}
+
+	exec := newTestExecutor(t, &mockAgentManager{}, newMockRepository())
+	persisted := exec.buildLastAgentError(context.Background(), "task-1", "task-repo-1", inspectionErr)
+	if len(persisted.RecoveryActions) != 1 || persisted.RecoveryActions[0] != models.RecoveryActionRetryLaunch {
+		t.Fatalf("persisted recovery actions = %#v, want ordinary retry action", persisted.RecoveryActions)
+	}
+}
+
 func TestPrepareSessionBlocksWorktreeRecoveryBeforePersistingSession(t *testing.T) {
 	repo := newMockRepository()
 	exec := newTestExecutor(t, &mockAgentManager{}, repo)
@@ -101,6 +119,25 @@ func TestClassifyLaunchFailureUsesWorkspaceCheckoutCategory(t *testing.T) {
 	))
 	if classification.code != models.LaunchErrorCategoryWorkspaceCheckoutFailed {
 		t.Fatalf("classification code = %q, want %q", classification.code, models.LaunchErrorCategoryWorkspaceCheckoutFailed)
+	}
+}
+
+func TestManagedCloneRelocationLaunchFailureOffersOnlyExplicitRecovery(t *testing.T) {
+	classification := classifyLaunchFailure(&worktree.ManagedCloneRelocationRequiredError{TaskID: "task-1"})
+	if classification.code != models.LaunchErrorCategoryManagedCloneRelocationRequired {
+		t.Fatalf("classification code = %q, want managed clone relocation", classification.code)
+	}
+	actions := launchFailureRecoveryActions(classification.code, "", false)
+	if len(actions) != 1 || actions[0] != models.RecoveryActionRelocateAndResume {
+		t.Fatalf("recovery actions = %#v, want explicit relocation only", actions)
+	}
+	value := map[string]interface{}{
+		"message": "workspace needs recovery", "code": classification.code,
+		"recovery_actions": actions, "occurred_at": time.Now().UTC(),
+	}
+	normalized, found := models.LoadLastAgentError(map[string]interface{}{models.SessionMetaKeyLastAgentError: value})
+	if !found || len(normalized.RecoveryActions) != 1 || normalized.RecoveryActions[0] != models.RecoveryActionRelocateAndResume {
+		t.Fatalf("normalized recovery actions = %#v, want explicit relocation", normalized.RecoveryActions)
 	}
 }
 

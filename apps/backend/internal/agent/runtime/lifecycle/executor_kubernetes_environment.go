@@ -218,7 +218,7 @@ func (r *KubernetesExecutor) claimTaskKubernetesEnvironment(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("load Kubernetes task environment: %w", err)
 	}
-	if env == nil || env.TaskID != original.TaskID || env.ExecutorType != "k8s" {
+	if env == nil || env.TaskID != original.TaskID || env.ExecutorType != string(executor.NameKubernetes) {
 		return nil, fmt.Errorf("%w: task environment does not match the requested Kubernetes task", models.ErrWorkspaceReuseUnsafe)
 	}
 	if original.WorkspaceReuseRequired && env.Status != models.TaskEnvironmentStatusReady {
@@ -281,7 +281,7 @@ func (r *KubernetesExecutor) isUnadoptedKubernetesResume(ctx context.Context, re
 	if err != nil {
 		return false, err
 	}
-	if env == nil || env.TaskID != req.TaskID || env.ExecutorType != "k8s" {
+	if env == nil || env.TaskID != req.TaskID || env.ExecutorType != string(executor.NameKubernetes) {
 		return false, fmt.Errorf("%w: task environment does not match the requested Kubernetes task", models.ErrWorkspaceReuseUnsafe)
 	}
 	return true, nil

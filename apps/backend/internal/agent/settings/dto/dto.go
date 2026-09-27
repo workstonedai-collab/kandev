@@ -75,9 +75,15 @@ type DynamicAgentProfileDTO struct {
 // for one dynamic candidate. The two classes are deliberately explicit so a
 // missing class can never silently inherit another class's behavior.
 type DynamicAgentPolicyDTO struct {
-	Version   int64                 `json:"version"`
-	Transient DynamicErrorPolicyDTO `json:"transient"`
-	Hard      DynamicErrorPolicyDTO `json:"hard"`
+	Version      int64                         `json:"version"`
+	Transient    DynamicErrorPolicyDTO         `json:"transient"`
+	Hard         DynamicErrorPolicyDTO         `json:"hard"`
+	Unclassified *DynamicUnclassifiedPolicyDTO `json:"unclassified,omitempty"`
+}
+
+type DynamicUnclassifiedPolicyDTO struct {
+	Enabled                     bool  `json:"enabled"`
+	ConsecutiveFailureThreshold int64 `json:"consecutive_failure_threshold"`
 }
 
 type DynamicErrorPolicyDTO struct {
@@ -465,42 +471,78 @@ type CommandPreviewRequest struct {
 	CommandPrefix      string          `json:"command_prefix,omitempty"`
 }
 
+// Flag destinations reported by CommandPreviewResponse.
+const (
+	// FlagDestinationAgentCLI means the flags reach the agent CLI itself.
+	FlagDestinationAgentCLI = "agent_cli"
+	// FlagDestinationACPBridge means the flags are appended to the launched ACP
+	// bridge process, which forwards no unrecognized argument to the agent CLI.
+	FlagDestinationACPBridge = "acp_bridge"
+)
+
 // CommandPreviewResponse is the response for the command preview endpoint
 type CommandPreviewResponse struct {
 	Supported     bool     `json:"supported"`
 	Command       []string `json:"command"`
 	CommandString string   `json:"command_string"`
+	// FlagDestination names the process the profile's CLI flags are appended
+	// to. Over ACP that is the bridge, not the agent CLI it wraps, and the
+	// difference is the whole reason a flag can look enabled and change
+	// nothing. Values: "agent_cli" or "acp_bridge".
+	FlagDestination string `json:"flag_destination,omitempty"`
 }
 
 // DynamicModelsResponse is the response for the /agent-models/:agentName endpoint.
 // Data now comes from the host utility capability cache populated by ACP probes.
 type DynamicModelsResponse struct {
-	AgentName      string            `json:"agent_name"`
-	Status         string            `json:"status"` // "probing" | "ok" | "auth_required" | "not_installed" | "failed"
-	Models         []ModelEntryDTO   `json:"models"`
-	CurrentModelID string            `json:"current_model_id,omitempty"`
-	Modes          []ModeEntryDTO    `json:"modes,omitempty"`
-	CurrentModeID  string            `json:"current_mode_id,omitempty"`
-	Commands       []CommandEntryDTO `json:"commands,omitempty"`
-	Error          *string           `json:"error"`
+	AgentName       string            `json:"agent_name"`
+	Status          string            `json:"status"` // "probing" | "ok" | "auth_required" | "not_installed" | "failed"
+	Models          []ModelEntryDTO   `json:"models"`
+	CurrentModelID  string            `json:"current_model_id,omitempty"`
+	Modes           []ModeEntryDTO    `json:"modes,omitempty"`
+	CurrentModeID   string            `json:"current_mode_id,omitempty"`
+	Commands        []CommandEntryDTO `json:"commands,omitempty"`
+	Error           *string           `json:"error"`
+	ContextRevision string            `json:"context_revision,omitempty"`
+}
+
+// ProfileLaunchSettingsRequest is a complete, request-only profile snapshot.
+// Pointer fields distinguish an explicit empty value from an omitted field.
+type ProfileLaunchSettingsRequest struct {
+	EnvVars       *[]ProfileEnvVarDTO `json:"env_vars"`
+	CLIFlags      *[]CLIFlagDTO       `json:"cli_flags"`
+	CommandPrefix *string             `json:"command_prefix"`
+}
+
+// ProfileCapabilityRequest asks the host utility to inspect a saved profile
+// or a complete unsaved launch-settings snapshot.
+type ProfileCapabilityRequest struct {
+	ProfileID          string                        `json:"profile_id,omitempty"`
+	LaunchSettings     *ProfileLaunchSettingsRequest `json:"launch_settings,omitempty"`
+	Refresh            bool                          `json:"refresh,omitempty"`
+	AuthorizationScope string                        `json:"-"`
 }
 
 // ResolveAgentModelConfigRequest selects the provider context to resolve.
 type ResolveAgentModelConfigRequest struct {
-	Model         string            `json:"model"`
-	Mode          string            `json:"mode,omitempty"`
-	ConfigOptions map[string]string `json:"config_options,omitempty"`
-	Refresh       bool              `json:"refresh,omitempty"`
+	Model              string                        `json:"model"`
+	Mode               string                        `json:"mode,omitempty"`
+	ConfigOptions      map[string]string             `json:"config_options,omitempty"`
+	Refresh            bool                          `json:"refresh,omitempty"`
+	ProfileID          string                        `json:"profile_id,omitempty"`
+	LaunchSettings     *ProfileLaunchSettingsRequest `json:"launch_settings,omitempty"`
+	AuthorizationScope string                        `json:"-"`
 }
 
 // AgentModelConfigResponse is the complete provider option snapshot for one
 // selected model.
 type AgentModelConfigResponse struct {
-	AgentName     string            `json:"agent_name"`
-	Model         string            `json:"model"`
-	Status        string            `json:"status"`
-	ConfigOptions []ConfigOptionDTO `json:"config_options"`
-	Error         *string           `json:"error"`
+	AgentName       string            `json:"agent_name"`
+	Model           string            `json:"model"`
+	Status          string            `json:"status"`
+	ConfigOptions   []ConfigOptionDTO `json:"config_options"`
+	Error           *string           `json:"error"`
+	ContextRevision string            `json:"context_revision,omitempty"`
 }
 
 // ModeEntryDTO is a single ACP session mode advertised by an agent.
