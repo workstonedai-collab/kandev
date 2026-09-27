@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/test-base";
+import { watchWs } from "../../helpers/causal-waits";
 import { waitForSessionDone } from "../../helpers/session";
 import { ChangeWorkflowPage } from "../../pages/change-workflow-page";
 import { KanbanPage } from "../../pages/kanban-page";
@@ -20,17 +21,25 @@ test.describe("Change workflow", () => {
       "External move target",
     );
     const analysis = await apiClient.createWorkflowStep(destination.id, "Analysis", 0);
-    await apiClient.createWorkflowStep(destination.id, "Implement", 1);
+    const implement = await apiClient.createWorkflowStep(destination.id, "Implement", 1);
     const task = await apiClient.createTask(seedData.workspaceId, "External workflow move task", {
       workflow_id: seedData.workflowId,
       workflow_step_id: seedData.startStepId,
     });
 
+    const ws = watchWs(testPage);
     await testPage.goto(`/t/${task.id}`);
     await expect(testPage.getByTestId("task-topbar")).toBeVisible();
     const taskUrl = testPage.url();
 
+    const moved = ws.waitForEvent("task.updated", {
+      where: (payload) =>
+        payload.task_id === task.id &&
+        payload.workflow_id === destination.id &&
+        payload.workflow_step_id === analysis.id,
+    });
     await apiClient.moveTask(task.id, destination.id, analysis.id);
+    await moved;
 
     await expect(testPage).toHaveURL(taskUrl);
     const stepper = testPage.getByTestId("workflow-stepper");
@@ -38,7 +47,15 @@ test.describe("Change workflow", () => {
       "aria-current",
       "step",
     );
-    await expect(stepper.getByTestId("workflow-step-Implement")).toBeVisible();
+    const compactStepper = stepper.getByTestId("workflow-stepper-minimal");
+    if (await compactStepper.isVisible()) {
+      await compactStepper.click();
+      await expect(
+        testPage.getByTestId(`workflow-step-disclosure-row-${implement.id}`),
+      ).toContainText("Implement");
+    } else {
+      await expect(stepper.getByTestId("workflow-step-Implement")).toBeVisible();
+    }
   });
 
   test("updates the open task stepper after changing workflow and preserves its context", async ({
