@@ -31,6 +31,7 @@ import {
   resolveEffectiveTask,
   resolveLatestTaskProjection,
   resolveTaskContentState,
+  shouldLoadWorkspaceRepositories,
   syncActiveTaskSession,
 } from "@/components/task/task-page-content-helpers";
 import { TaskPageInner } from "@/components/task/task-page-inner";
@@ -289,6 +290,8 @@ function useTaskPageData(
   const agent = useSessionAgent(task);
   const ensureSession = useEnsureTaskSession({
     id: task?.id,
+    isArchived: task?.archived_at != null,
+    archiveStateKnown: task !== null,
     workflowStepId: task?.workflow_step_id,
     workflowId: task?.workflow_id,
   });
@@ -308,10 +311,9 @@ function useTaskPageData(
     if (applied) previousRouteTaskId.current = initialTask?.id ?? fallbackTaskId;
   }, [initialTask?.id, fallbackTaskId, initialSessionId, setActiveSessionAuto, setActiveTask]);
 
-  const isCursorCloudTask = task?.primary_executor_type === "cursor_cloud";
   const { repositories } = useRepositories(
     task?.workspace_id ?? null,
-    Boolean(task?.workspace_id && !isCursorCloudTask),
+    shouldLoadWorkspaceRepositories(task),
   );
   const effectiveRepositories = repositories.length ? repositories : initialRepositories;
   const repository = useMemo(

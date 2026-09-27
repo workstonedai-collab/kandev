@@ -456,6 +456,7 @@ function CursorCloudTaskPage({
   return (
     <TooltipProvider>
       <TaskArchivedProvider value={archivedValue}>
+        <TaskCommands task={task} />
         <TaskLaunchErrorProvider
           value={{
             taskId: task.id,
@@ -599,7 +600,7 @@ function TaskPagePrimaryContent({
         />
       )}
       <TaskArchivedProvider value={archivedValue}>
-        <TaskCommands />
+        <TaskCommands task={task} />
         <TaskLaunchErrorProvider
           value={{
             taskId: task.id,
