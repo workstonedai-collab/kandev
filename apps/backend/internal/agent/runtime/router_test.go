@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/kandev/kandev/internal/agentctl/types/streams"
 )
 
 func TestRouterUsesDurableRuntimeOwner(t *testing.T) {
@@ -71,3 +73,13 @@ func (*routerTestRuntime) SubscribeEvents(context.Context, string) (<-chan Event
 	return nil, nil
 }
 func (*routerTestRuntime) SetMcpMode(context.Context, string, string) error { return nil }
+func (*routerTestRuntime) SuspendIdle(context.Context, IdleSuspensionIdentity) error {
+	return nil
+}
+func (*routerTestRuntime) ExecuteBackgroundWorkAction(
+	context.Context,
+	string,
+	streams.BackgroundWorkActionRequest,
+) (streams.BackgroundWorkActionResponse, error) {
+	return streams.BackgroundWorkActionResponse{}, nil
+}
