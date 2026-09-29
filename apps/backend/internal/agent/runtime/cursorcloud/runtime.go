@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kandev/kandev/internal/agent/runtime"
 	"github.com/kandev/kandev/internal/agent/runtime/lifecycle"
+	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	provider "github.com/kandev/kandev/internal/cursorcloud"
 	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/repository"
@@ -651,6 +652,18 @@ func (r *Runtime) SetMcpMode(ctx context.Context, executionID, mode string) erro
 	if mode == operation.RequestSnapshot.MCPMode {
 		return nil
 	}
+	return runtime.ErrUnsupported
+}
+
+func (r *Runtime) ExecuteBackgroundWorkAction(
+	_ context.Context,
+	_ string,
+	_ streams.BackgroundWorkActionRequest,
+) (streams.BackgroundWorkActionResponse, error) {
+	return streams.BackgroundWorkActionResponse{}, runtime.ErrUnsupported
+}
+
+func (r *Runtime) SuspendIdle(_ context.Context, _ runtime.IdleSuspensionIdentity) error {
 	return runtime.ErrUnsupported
 }
 
