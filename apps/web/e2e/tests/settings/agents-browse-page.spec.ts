@@ -65,6 +65,9 @@ test.describe("Agents browse page", () => {
   test("renders the heading and install cards statically, without a collapsible toggle", async ({
     testPage,
   }) => {
+    await testPage.route("**/api/v1/agents/available**", (route) =>
+      route.fulfill({ json: AVAILABLE_AGENTS }),
+    );
     await testPage.goto("/settings/agents/browse");
 
     const heading = testPage.getByRole("heading", { name: "Browse available agents" });

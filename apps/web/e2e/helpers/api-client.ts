@@ -824,8 +824,8 @@ export class ApiClient {
    * Without this guard the per-test cleanup deletes the seeded CEO and
    * cascades into "No agents yet" failures across office tests.
    */
-  async cleanupTestProfiles(keepIds: string[]): Promise<void> {
-    const { agents } = await this.listAgents();
+  async cleanupTestProfiles(keepIds: string[], agentSnapshot?: Agent[]): Promise<void> {
+    const agents = agentSnapshot ?? (await this.listAgents()).agents;
     for (const agent of agents) {
       for (const profile of agent.profiles ?? []) {
         const wsId = (profile as unknown as { workspace_id?: string }).workspace_id;

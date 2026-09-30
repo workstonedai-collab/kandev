@@ -107,6 +107,7 @@ export function seedLargeFileTree(backend: BackendContext): void {
     makeGitEnv(backend.tmpDir),
   );
   git.exec("git checkout main");
+  git.exec("git pull --ff-only origin main");
   for (let index = 0; index < LARGE_FILE_TREE_COUNT; index += 1) {
     git.createFile(largeFileTreePath(index), `large tree entry ${index}\n`);
   }
