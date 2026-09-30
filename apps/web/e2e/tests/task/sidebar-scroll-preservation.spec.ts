@@ -182,6 +182,9 @@ test.describe("sidebar scrolling", () => {
     await expect
       .poll(() => titleText.evaluate((element) => element.style.transform))
       .toMatch(/^translateX\(-/);
+    // The moving title is a poor pointer target while CSS hover state settles.
+    // Keep the pointer on the stationary row surface for the action assertion.
+    await taskRow.hover({ position: { x: 8, y: 12 } });
     await expect(actions.locator("..")).toHaveCSS("opacity", "1");
     await expect(actions).toBeInViewport();
 
@@ -285,7 +288,9 @@ test.describe("sidebar scrolling", () => {
       created.push({ id: task.id, title });
     }
 
-    const initialTask = created.at(-1)!;
+    // Start on the oldest task so selecting the newest task above the scroller
+    // changes routes instead of reselecting the already-active task.
+    const initialTask = created[0]!;
     await testPage.goto(`/t/${initialTask.id}`);
     const session = new SessionPage(testPage);
     await session.waitForLoad();
@@ -500,23 +505,29 @@ test.describe("sidebar scrolling", () => {
     });
     await expect(scrollContainer).toHaveAttribute("data-can-scroll-down", "false");
 
-    const aboveTitle = await scrollContainer.evaluate(
+    const aboveTitles = await scrollContainer.evaluate(
       (element, taskTitles) => {
         const containerRect = element.getBoundingClientRect();
         const rows = element.querySelectorAll<HTMLElement>("[data-testid='sidebar-task-item']");
+        const titles: string[] = [];
         for (const row of rows) {
           const rowRect = row.getBoundingClientRect();
           if (rowRect.bottom <= containerRect.top + 1) {
             const title = taskTitles.find((candidate) => row.textContent?.includes(candidate));
-            if (title) return title;
+            if (title) titles.push(title);
           }
         }
-        return null;
+        return titles;
       },
       created.map(({ title }) => title),
     );
-    if (!aboveTitle) throw new Error("Expected a rendered task row above the viewport");
-    const targetTask = created.find(({ title }) => title === aboveTitle)!;
+    const targetTask = created.find(
+      ({ id, title }) => id !== initialTask.id && aboveTitles.includes(title),
+    );
+    if (!targetTask) {
+      throw new Error("Expected an off-screen task other than the currently selected task");
+    }
+    expect(targetTask.id).not.toBe(initialTask.id);
     const targetRow = session.sidebarTaskItem(targetTask.title);
     const before = await Promise.all([scrollContainer.boundingBox(), targetRow.boundingBox()]);
     if (!before[0] || !before[1]) throw new Error("Command-selected target has no layout box");
